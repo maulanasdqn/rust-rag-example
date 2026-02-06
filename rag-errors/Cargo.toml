@@ -1,0 +1,9 @@
+[package]
+name = "rag-errors"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum.workspace = true
+serde.workspace = true
+thiserror.workspace = true

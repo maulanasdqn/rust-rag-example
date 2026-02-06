@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["api", "rag", "document", "storage", "config", "common"]
+members = [
+    "rag-server",
+    "rag-documents",
+    "rag-query",
+    "rag-database",
+    "rag-types",
+    "rag-errors",
+    "rag-config",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,16 +28,18 @@ thiserror = "1.0"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-config = "0.14"
 dotenvy = "0.15"
 pdf-extract = "0.7"
 tempfile = "3"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
-api = { path = "api" }
-rag = { path = "rag" }
-document = { path = "document" }
-storage = { path = "storage" }
-rag-config = { path = "config" }
-common = { path = "common" }
+config = "0.14"
+
+rag-server = { path = "rag-server" }
+rag-documents = { path = "rag-documents" }
+rag-query = { path = "rag-query" }
+rag-database = { path = "rag-database" }
+rag-types = { path = "rag-types" }
+rag-errors = { path = "rag-errors" }
+rag-config = { path = "rag-config" }

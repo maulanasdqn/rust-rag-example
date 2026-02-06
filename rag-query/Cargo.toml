@@ -1,0 +1,15 @@
+[package]
+name = "rag-query"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rag-errors = { path = "../rag-errors" }
+rag-types = { path = "../rag-types" }
+rag-database = { path = "../rag-database" }
+async-openai.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+serde.workspace = true
+tracing.workspace = true
+uuid.workspace = true
