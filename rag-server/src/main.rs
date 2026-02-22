@@ -16,9 +16,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let settings = Settings::load()?;
 
-    let _use_cases = use_cases::UseCases::new(&settings).await?;
+    let state = use_cases::AppState::new(&settings).await?;
 
-    let app = router::create_router();
+    let app = router::create_router(state);
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

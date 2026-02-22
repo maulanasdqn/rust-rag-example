@@ -3,3 +3,11 @@
 .env.*
 *.pem
 *.key
+
+# PostgreSQL data (Nix devshell)
+.pg_data/
+
+# Frontend build artifacts
+rag-ui/dist/
+rag-ui/node_modules/
+rag-ui/output.css

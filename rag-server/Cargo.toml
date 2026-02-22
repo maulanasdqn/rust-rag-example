@@ -22,3 +22,5 @@ tracing-subscriber = { workspace = true }
 tower-http = { workspace = true }
 dotenvy = { workspace = true }
 async-trait = { workspace = true }
+serde = { workspace = true }
+uuid = { workspace = true }

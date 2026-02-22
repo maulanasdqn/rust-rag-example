@@ -1,0 +1,64 @@
+version: "0.5"
+
+# Disable process-compose's HTTP server to avoid port conflicts
+disable_http: true
+
+processes:
+  postgres:
+    command: |
+      export PGDATA=".pg_data"
+      export PGHOST="$PGDATA"
+
+      if [ ! -d "$PGDATA" ]; then
+        echo "Initializing PostgreSQL..."
+        initdb -D "$PGDATA" --auth=trust --no-locale --encoding=UTF8
+        echo "unix_socket_directories = '$PWD/$PGDATA'" >> "$PGDATA/postgresql.conf"
+        echo "listen_addresses = 'localhost'" >> "$PGDATA/postgresql.conf"
+        echo "port = 5432" >> "$PGDATA/postgresql.conf"
+      fi
+
+      # Start postgres in foreground
+      postgres -D "$PGDATA"
+    readiness_probe:
+      exec:
+        command: pg_isready -h .pg_data -p 5432
+      initial_delay_seconds: 2
+      period_seconds: 2
+    shutdown:
+      command: pg_ctl -D .pg_data stop -m fast
+
+  db-setup:
+    command: |
+      sleep 3
+      export PGDATA=".pg_data"
+      psql -h "$PGDATA" -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'rag_db'" | grep -q 1 || \
+        createdb -h "$PGDATA" -p 5432 rag_db
+      psql -h "$PGDATA" -p 5432 -d rag_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+      echo "Database ready with pgvector extension!"
+    depends_on:
+      postgres:
+        condition: process_healthy
+    availability:
+      restart: "no"
+
+  backend:
+    command: cargo run -p rag-server
+    depends_on:
+      db-setup:
+        condition: process_completed_successfully
+    readiness_probe:
+      http_get:
+        host: localhost
+        port: 8080
+        path: /api/query
+      initial_delay_seconds: 5
+      period_seconds: 3
+
+  frontend:
+    command: |
+      cd rag-ui
+      npm install --silent
+      trunk serve
+    depends_on:
+      backend:
+        condition: process_started

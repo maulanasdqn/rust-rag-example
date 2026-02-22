@@ -36,6 +36,8 @@ pub struct DatabaseSettings {
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAISettings {
     pub api_key: String,
+    #[serde(default = "default_api_base")]
+    pub api_base: String,
     #[serde(default = "default_embedding_model")]
     pub embedding_model: String,
     #[serde(default = "default_chat_model")]
@@ -64,6 +66,10 @@ fn default_port() -> u16 {
 
 fn default_max_connections() -> u32 {
     10
+}
+
+fn default_api_base() -> String {
+    "https://api.openai.com/v1".to_string()
 }
 
 fn default_embedding_model() -> String {

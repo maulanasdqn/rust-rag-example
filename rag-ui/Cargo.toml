@@ -1,0 +1,41 @@
+[package]
+name = "rag-ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+leptos = { version = "0.8", features = ["csr"] }
+leptos_router = "0.8"
+leptos_meta = "0.8"
+
+# HTTP client for API calls
+gloo-net = "0.6"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Web APIs
+web-sys = { version = "0.3", features = [
+    "FormData",
+    "File",
+    "FileList",
+    "HtmlInputElement",
+    "Window",
+    "console"
+] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+# Error handling in WASM
+console_error_panic_hook = "0.1"
+
+# Shared types with backend
+rag-types = { workspace = true }
+
+# UUID for document IDs (needs js feature for WASM)
+uuid = { version = "1.0", features = ["v4", "serde", "js"] }
+
+[package.metadata.leptos]
+tailwind-input-file = "input.css"
+tailwind-output-file = "output.css"

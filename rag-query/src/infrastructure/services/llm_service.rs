@@ -19,8 +19,10 @@ pub struct LlmService {
 }
 
 impl LlmService {
-    pub fn new(api_key: &str, model: &str, system_prompt: &str) -> Self {
-        let config = OpenAIConfig::new().with_api_key(api_key);
+    pub fn new(api_key: &str, api_base: &str, model: &str, system_prompt: &str) -> Self {
+        let config = OpenAIConfig::new()
+            .with_api_key(api_key)
+            .with_api_base(api_base);
         let client = Client::with_config(config);
         Self {
             client,
