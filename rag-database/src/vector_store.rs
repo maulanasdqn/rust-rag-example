@@ -114,10 +114,10 @@ impl VectorStore for PgVectorStore {
             r#"
             SELECT
                 id, document_id, content, chunk_index, metadata,
-                1 - (embedding <=> $1) as score
+                (1 - (embedding <=> $1::vector))::real as score
             FROM document_chunks
             WHERE embedding IS NOT NULL
-            ORDER BY embedding <=> $1
+            ORDER BY embedding <=> $1::vector
             LIMIT $2
             "#,
         )
