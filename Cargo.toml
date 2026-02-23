@@ -10,6 +10,9 @@ members = [
     "rag-errors",
     "rag-config",
     "rag-ui",
+    "rag-memory",
+    "rag-tools",
+    "rag-agents",
 ]
 
 [workspace.package]
@@ -20,8 +23,12 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["multipart"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower = { version = "0.4", features = ["timeout", "limit"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "limit", "request-id"] }
+governor = "0.6"
+regex = "1.10"
+sha2 = "0.10"
+hex = "0.4"
 surrealdb = { version = "2.3", features = ["kv-rocksdb"] }
 async-openai = "0.23"
 serde = { version = "1.0", features = ["derive"] }
@@ -48,3 +55,6 @@ rag-database = { path = "rag-database" }
 rag-types = { path = "rag-types" }
 rag-errors = { path = "rag-errors" }
 rag-config = { path = "rag-config" }
+rag-memory = { path = "rag-memory" }
+rag-tools = { path = "rag-tools" }
+rag-agents = { path = "rag-agents" }

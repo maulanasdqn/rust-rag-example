@@ -7,7 +7,7 @@ use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
 use components::{MobileNav, Sidebar};
-use pages::{ChatPage, DocumentsPage, HomePage};
+use pages::{AgentsPage, ChatPage, DocumentsPage, HomePage};
 
 fn main() {
     console_error_panic_hook::set_once();
@@ -32,6 +32,7 @@ fn App() -> impl IntoView {
                         <Routes fallback=|| "Page not found">
                             <Route path=path!("/") view=HomePage />
                             <Route path=path!("/chat") view=ChatPage />
+                            <Route path=path!("/agents") view=AgentsPage />
                             <Route path=path!("/documents") view=DocumentsPage />
                         </Routes>
                     </main>

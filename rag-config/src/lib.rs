@@ -16,6 +16,83 @@ pub struct Settings {
     pub database: DatabaseSettings,
     pub openai: OpenAISettings,
     pub rag: RagSettings,
+    #[serde(default)]
+    pub security: SecuritySettings,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecuritySettings {
+    /// API keys that are allowed to access the API (comma-separated in env var)
+    #[serde(default)]
+    pub api_keys: Vec<String>,
+    /// Whether to require API key authentication
+    #[serde(default = "default_require_auth")]
+    pub require_auth: bool,
+    /// Rate limit: requests per minute per IP
+    #[serde(default = "default_rate_limit_rpm")]
+    pub rate_limit_rpm: u32,
+    /// Rate limit: requests per minute for expensive operations (chat, agents)
+    #[serde(default = "default_expensive_rate_limit_rpm")]
+    pub expensive_rate_limit_rpm: u32,
+    /// Maximum query length in characters
+    #[serde(default = "default_max_query_length")]
+    pub max_query_length: usize,
+    /// Maximum message content length
+    #[serde(default = "default_max_message_length")]
+    pub max_message_length: usize,
+    /// Maximum tokens per response (cost control)
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    /// Allowed CORS origins (comma-separated, empty = allow all)
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+    /// Enable prompt injection detection
+    #[serde(default = "default_true")]
+    pub prompt_injection_detection: bool,
+}
+
+impl Default for SecuritySettings {
+    fn default() -> Self {
+        Self {
+            api_keys: Vec::new(),
+            require_auth: default_require_auth(),
+            rate_limit_rpm: default_rate_limit_rpm(),
+            expensive_rate_limit_rpm: default_expensive_rate_limit_rpm(),
+            max_query_length: default_max_query_length(),
+            max_message_length: default_max_message_length(),
+            max_tokens: default_max_tokens(),
+            allowed_origins: Vec::new(),
+            prompt_injection_detection: true,
+        }
+    }
+}
+
+fn default_require_auth() -> bool {
+    false // Default to false for development, set to true in production
+}
+
+fn default_rate_limit_rpm() -> u32 {
+    60 // 60 requests per minute
+}
+
+fn default_expensive_rate_limit_rpm() -> u32 {
+    20 // 20 expensive requests per minute
+}
+
+fn default_max_query_length() -> usize {
+    10000 // 10k characters max
+}
+
+fn default_max_message_length() -> usize {
+    50000 // 50k characters max for message content
+}
+
+fn default_max_tokens() -> u32 {
+    4096 // Max tokens per response
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,6 +130,14 @@ pub struct RagSettings {
     pub top_k: usize,
     #[serde(default = "default_system_prompt")]
     pub system_prompt: String,
+    /// Minimum relevance score (0.0-1.0) for a document to be considered relevant
+    /// Questions with all results below this threshold will be rejected as out-of-context
+    #[serde(default = "default_min_relevance_score")]
+    pub min_relevance_score: f32,
+}
+
+fn default_min_relevance_score() -> f32 {
+    0.10 // Reject if best match is below 10% relevance (very permissive)
 }
 
 fn default_host() -> String {
@@ -92,8 +177,14 @@ fn default_top_k() -> usize {
 }
 
 fn default_system_prompt() -> String {
-    "Answer questions using the provided context. Be brief and direct - give only the essential information in 1-3 sentences. No unnecessary explanations."
-        .to_string()
+    r#"You answer questions using ONLY the provided context. Be direct and concise.
+
+RULES:
+1. Give the answer directly - NO preamble phrases like "Based on the context", "According to the document", "From the information provided", etc.
+2. Just state the facts. Example: Q: "What is his email?" A: "maulanasdqn@gmail.com"
+3. If you cannot answer from the context, say: "I don't have that information."
+4. Keep answers to 1-3 sentences max.
+5. Never make up information."#.to_string()
 }
 
 impl Settings {
