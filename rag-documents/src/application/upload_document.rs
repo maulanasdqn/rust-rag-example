@@ -1,5 +1,6 @@
 use crate::domain::{DocumentLoader, DocumentRepository};
 use rag_errors::AppError;
+use rag_inference::EmbeddingProvider;
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -10,11 +11,6 @@ pub struct UploadDocument<L: DocumentLoader, R: DocumentRepository, E: Embedding
     embedding_provider: Arc<E>,
     chunk_size: usize,
     chunk_overlap: usize,
-}
-
-#[async_trait::async_trait]
-pub trait EmbeddingProvider: Send + Sync {
-    async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, AppError>;
 }
 
 impl<L: DocumentLoader, R: DocumentRepository, E: EmbeddingProvider> UploadDocument<L, R, E> {

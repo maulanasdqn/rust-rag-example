@@ -1,0 +1,13 @@
+[package]
+name = "rag-inference"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rag-database = { path = "../rag-database" }
+rag-errors = { path = "../rag-errors" }
+async-openai.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+futures.workspace = true
+tokio-stream.workspace = true

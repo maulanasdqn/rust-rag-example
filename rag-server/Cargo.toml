@@ -12,15 +12,19 @@ rag-config = { path = "../rag-config" }
 rag-database = { path = "../rag-database" }
 rag-documents = { path = "../rag-documents" }
 rag-errors = { path = "../rag-errors" }
+rag-inference = { path = "../rag-inference" }
 rag-query = { path = "../rag-query" }
 rag-types = { path = "../rag-types" }
 
 axum = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tower-http = { workspace = true }
 dotenvy = { workspace = true }
 async-trait = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 uuid = { workspace = true }

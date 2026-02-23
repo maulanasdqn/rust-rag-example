@@ -28,9 +28,8 @@ pub struct ServerSettings {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseSettings {
-    pub url: String,
-    #[serde(default = "default_max_connections")]
-    pub max_connections: u32,
+    #[serde(default = "default_database_path")]
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,8 +63,8 @@ fn default_port() -> u16 {
     8080
 }
 
-fn default_max_connections() -> u32 {
-    10
+fn default_database_path() -> String {
+    "./data/rag.db".to_string()
 }
 
 fn default_api_base() -> String {
@@ -93,7 +92,7 @@ fn default_top_k() -> usize {
 }
 
 fn default_system_prompt() -> String {
-    "You are a helpful assistant. Use the provided context to answer questions accurately."
+    "Answer questions using the provided context. Be brief and direct - give only the essential information in 1-3 sentences. No unnecessary explanations."
         .to_string()
 }
 

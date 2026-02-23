@@ -4,8 +4,8 @@
 *.pem
 *.key
 
-# PostgreSQL data (Nix devshell)
-.pg_data/
+# SurrealDB data
+data/
 
 # Frontend build artifacts
 rag-ui/dist/

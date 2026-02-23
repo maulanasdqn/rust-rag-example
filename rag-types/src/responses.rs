@@ -27,9 +27,15 @@ pub struct SourceInfo {
     pub relevance_score: f32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DocumentInfo {
+    pub id: Uuid,
+    pub name: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct DocumentListResponse {
-    pub documents: Vec<Uuid>,
+    pub documents: Vec<DocumentInfo>,
 }
 
 #[derive(Debug, Serialize)]

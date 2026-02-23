@@ -7,6 +7,7 @@ edition = "2021"
 rag-errors = { path = "../rag-errors" }
 rag-types = { path = "../rag-types" }
 rag-database = { path = "../rag-database" }
+rag-inference = { path = "../rag-inference" }
 async-trait.workspace = true
 axum.workspace = true
 pdf-extract.workspace = true

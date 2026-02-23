@@ -19,7 +19,11 @@ impl Document {
         let mut chunk_index = 0;
 
         while start < text.len() {
-            let end = (start + chunk_size).min(text.len());
+            // Find valid char boundary for end position
+            let mut end = (start + chunk_size).min(text.len());
+            while end < text.len() && !text.is_char_boundary(end) {
+                end += 1;
+            }
 
             let actual_end = if end < text.len() {
                 find_break_point(text, start, end)
@@ -44,11 +48,16 @@ impl Document {
                 chunk_index += 1;
             }
 
-            start = if actual_end >= text.len() {
+            // Find valid char boundary for next start position
+            let mut next_start = if actual_end >= text.len() {
                 text.len()
             } else {
-                (actual_end - chunk_overlap).max(start + 1)
+                actual_end.saturating_sub(chunk_overlap).max(start + 1)
             };
+            while next_start < text.len() && !text.is_char_boundary(next_start) {
+                next_start += 1;
+            }
+            start = next_start;
         }
 
         chunks

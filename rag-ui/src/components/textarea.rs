@@ -6,6 +6,7 @@ pub fn Textarea(
     #[prop(into)] on_input: Callback<String>,
     #[prop(optional, into, default = String::new())] placeholder: String,
     #[prop(optional, default = 3)] rows: u32,
+    #[prop(optional)] on_keydown: Option<Callback<leptos::ev::KeyboardEvent>>,
 ) -> impl IntoView {
     view! {
         <textarea
@@ -13,6 +14,11 @@ pub fn Textarea(
             on:input=move |ev| {
                 let v = event_target_value(&ev);
                 on_input.run(v);
+            }
+            on:keydown=move |ev| {
+                if let Some(callback) = on_keydown {
+                    callback.run(ev);
+                }
             }
             placeholder=placeholder
             rows=rows

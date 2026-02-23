@@ -6,8 +6,7 @@ edition = "2021"
 [dependencies]
 rag-errors = { path = "../rag-errors" }
 rag-types = { path = "../rag-types" }
-sqlx.workspace = true
-pgvector.workspace = true
+surrealdb.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 serde.workspace = true

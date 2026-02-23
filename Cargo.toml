@@ -4,6 +4,7 @@ members = [
     "rag-server",
     "rag-documents",
     "rag-query",
+    "rag-inference",
     "rag-database",
     "rag-types",
     "rag-errors",
@@ -18,10 +19,10 @@ edition = "2021"
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono"] }
-pgvector = { version = "0.3", features = ["sqlx"] }
+surrealdb = { version = "2.3", features = ["kv-rocksdb"] }
 async-openai = "0.23"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -36,10 +37,13 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 config = "0.14"
+futures = "0.3"
+tokio-stream = "0.1"
 
 rag-server = { path = "rag-server" }
 rag-documents = { path = "rag-documents" }
 rag-query = { path = "rag-query" }
+rag-inference = { path = "rag-inference" }
 rag-database = { path = "rag-database" }
 rag-types = { path = "rag-types" }
 rag-errors = { path = "rag-errors" }

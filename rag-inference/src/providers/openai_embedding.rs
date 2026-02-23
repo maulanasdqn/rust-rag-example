@@ -1,4 +1,4 @@
-use crate::application::EmbeddingProvider;
+use crate::EmbeddingProvider;
 use async_openai::{
     config::OpenAIConfig,
     types::{CreateEmbeddingRequestArgs, EmbeddingInput},
@@ -8,12 +8,12 @@ use async_trait::async_trait;
 use rag_errors::AppError;
 use tracing::instrument;
 
-pub struct EmbeddingService {
+pub struct OpenAIEmbedding {
     client: Client<OpenAIConfig>,
     model: String,
 }
 
-impl EmbeddingService {
+impl OpenAIEmbedding {
     pub fn new(api_key: &str, api_base: &str, model: &str) -> Self {
         let config = OpenAIConfig::new()
             .with_api_key(api_key)
@@ -24,9 +24,12 @@ impl EmbeddingService {
             model: model.to_string(),
         }
     }
+}
 
+#[async_trait]
+impl EmbeddingProvider for OpenAIEmbedding {
     #[instrument(skip(self, texts), fields(text_count = texts.len()))]
-    pub async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, AppError> {
+    async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, AppError> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
@@ -48,10 +51,7 @@ impl EmbeddingService {
 
         Ok(embeddings)
     }
-}
 
-#[async_trait]
-impl EmbeddingProvider for EmbeddingService {
     #[instrument(skip(self, text))]
     async fn embed_query(&self, text: &str) -> Result<Vec<f32>, AppError> {
         let embeddings = self.embed_texts(vec![text.to_string()]).await?;

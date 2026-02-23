@@ -1,40 +1,18 @@
-use async_trait::async_trait;
 use rag_config::Settings;
-use rag_database::{create_pool, PgVectorStore};
+use rag_database::{create_pool, run_migrations, SurrealVectorStore};
 use rag_documents::{
     application::{DeleteDocument, ListDocuments, UploadDocument},
-    infrastructure::persistence::{CompositeLoader, PostgresDocumentRepository},
-    EmbeddingProvider as DocumentEmbeddingProvider,
+    infrastructure::persistence::{CompositeLoader, SurrealDocumentRepository},
 };
-use rag_errors::AppError;
-use rag_query::{
-    application::QueryDocuments,
-    infrastructure::services::{EmbeddingService, LlmService},
-};
+use rag_inference::{OpenAIEmbedding, OpenAILlm};
+use rag_query::application::QueryDocuments;
 use std::sync::Arc;
 
-pub struct DocumentEmbedder {
-    service: Arc<EmbeddingService>,
-}
-
-impl DocumentEmbedder {
-    pub fn new(service: Arc<EmbeddingService>) -> Self {
-        Self { service }
-    }
-}
-
-#[async_trait]
-impl DocumentEmbeddingProvider for DocumentEmbedder {
-    async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, AppError> {
-        self.service.embed_texts(texts).await
-    }
-}
-
 pub type UploadDocumentUseCase =
-    UploadDocument<CompositeLoader, PostgresDocumentRepository, DocumentEmbedder>;
-pub type ListDocumentsUseCase = ListDocuments<PostgresDocumentRepository>;
-pub type DeleteDocumentUseCase = DeleteDocument<PostgresDocumentRepository>;
-pub type QueryDocumentsUseCase = QueryDocuments<PgVectorStore, EmbeddingService, LlmService>;
+    UploadDocument<CompositeLoader, SurrealDocumentRepository, OpenAIEmbedding>;
+pub type ListDocumentsUseCase = ListDocuments<SurrealDocumentRepository>;
+pub type DeleteDocumentUseCase = DeleteDocument<SurrealDocumentRepository>;
+pub type QueryDocumentsUseCase = QueryDocuments<SurrealVectorStore, OpenAIEmbedding, OpenAILlm>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -46,21 +24,20 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(settings: &Settings) -> Result<Self, Box<dyn std::error::Error>> {
-        let pool = create_pool(&settings.database.url, settings.database.max_connections).await?;
-        let vector_store = Arc::new(PgVectorStore::new(pool));
+        let pool = create_pool(&settings.database.path).await?;
+        run_migrations(&pool).await?;
+        let vector_store = Arc::new(SurrealVectorStore::new(pool));
 
-        let document_repository = Arc::new(PostgresDocumentRepository::new(vector_store.clone()));
+        let document_repository = Arc::new(SurrealDocumentRepository::new(vector_store.clone()));
         let document_loader = Arc::new(CompositeLoader::default_loaders());
 
-        let embedding_service = Arc::new(EmbeddingService::new(
+        let embedding_provider = Arc::new(OpenAIEmbedding::new(
             &settings.openai.api_key,
             &settings.openai.api_base,
             &settings.openai.embedding_model,
         ));
 
-        let document_embedder = Arc::new(DocumentEmbedder::new(embedding_service.clone()));
-
-        let llm_service = Arc::new(LlmService::new(
+        let llm_provider = Arc::new(OpenAILlm::new(
             &settings.openai.api_key,
             &settings.openai.api_base,
             &settings.openai.chat_model,
@@ -70,7 +47,7 @@ impl AppState {
         let upload_document = Arc::new(UploadDocument::new(
             document_loader,
             document_repository.clone(),
-            document_embedder,
+            embedding_provider.clone(),
             settings.rag.chunk_size,
             settings.rag.chunk_overlap,
         ));
@@ -80,8 +57,8 @@ impl AppState {
 
         let query_documents = Arc::new(QueryDocuments::new(
             vector_store,
-            embedding_service,
-            llm_service,
+            embedding_provider,
+            llm_provider,
             settings.rag.top_k,
         ));
 

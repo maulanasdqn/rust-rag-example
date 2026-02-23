@@ -1,61 +1,62 @@
 use rag_errors::AppError;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
+use std::sync::Arc;
+use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::Surreal;
 
-pub type DbPool = PgPool;
+pub type DbPool = Arc<Surreal<Db>>;
 
-pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<DbPool, AppError> {
-    PgPoolOptions::new()
-        .max_connections(max_connections)
-        .connect(database_url)
+pub async fn create_pool(database_path: &str) -> Result<DbPool, AppError> {
+    let db = Surreal::new::<RocksDb>(database_path)
         .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    db.use_ns("rag")
+        .use_db("rag_db")
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Arc::new(db))
 }
 
 pub async fn run_migrations(pool: &DbPool) -> Result<(), AppError> {
-    sqlx::query(
+    // Define document table schema (id is automatic record id)
+    pool.query(
         r#"
-        CREATE EXTENSION IF NOT EXISTS vector;
-
-        CREATE TABLE IF NOT EXISTS documents (
-            id UUID PRIMARY KEY,
-            source_file TEXT NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS document_chunks (
-            id UUID PRIMARY KEY,
-            document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-            content TEXT NOT NULL,
-            chunk_index INTEGER NOT NULL,
-            metadata JSONB NOT NULL,
-            embedding vector(1536),
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON document_chunks(document_id);
+        DEFINE TABLE IF NOT EXISTS document SCHEMAFULL;
+        DEFINE FIELD IF NOT EXISTS source_file ON document TYPE string;
+        DEFINE FIELD IF NOT EXISTS created_at ON document TYPE datetime DEFAULT time::now();
         "#,
     )
-    .execute(pool)
     .await
     .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM document_chunks")
-        .fetch_one(pool)
-        .await
-        .unwrap_or((0,));
+    // Define document_chunk table with embedding (id is automatic record id)
+    pool.query(
+        r#"
+        DEFINE TABLE IF NOT EXISTS document_chunk SCHEMAFULL;
+        DEFINE FIELD IF NOT EXISTS document_id ON document_chunk TYPE string;
+        DEFINE FIELD IF NOT EXISTS content ON document_chunk TYPE string;
+        DEFINE FIELD IF NOT EXISTS chunk_index ON document_chunk TYPE int;
+        DEFINE FIELD IF NOT EXISTS metadata ON document_chunk FLEXIBLE TYPE object;
+        DEFINE FIELD IF NOT EXISTS embedding ON document_chunk TYPE array<float>;
+        DEFINE FIELD IF NOT EXISTS created_at ON document_chunk TYPE datetime DEFAULT time::now();
 
-    if count.0 >= 100 {
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON document_chunks
-                USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-            "#,
-        )
-        .execute(pool)
-        .await
-        .ok();
-    }
+        DEFINE INDEX IF NOT EXISTS idx_chunk_document ON document_chunk FIELDS document_id;
+        "#,
+    )
+    .await
+    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    // Rebuild HNSW index to ensure all embeddings are indexed
+    pool.query(
+        r#"
+        REMOVE INDEX IF EXISTS idx_chunk_embedding ON document_chunk;
+        DEFINE INDEX idx_chunk_embedding ON document_chunk
+            FIELDS embedding HNSW DIMENSION 1536 DIST COSINE TYPE F32;
+        "#,
+    )
+    .await
+    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
     Ok(())
 }
