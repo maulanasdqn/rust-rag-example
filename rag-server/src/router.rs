@@ -1,10 +1,9 @@
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, Multipart, Path, State},
     response::sse::{Event, KeepAlive, Sse},
     routing::{delete, get, post},
     Json, Router,
 };
-use axum::extract::{Multipart, Path};
 use futures::stream::StreamExt;
 use rag_errors::AppError;
 use rag_types::{DeleteResponse, DocumentInfo, DocumentListResponse, QueryResponse, SourceInfo, UploadResponse};
@@ -47,6 +46,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/documents/documents/:id", delete(delete_document_handler))
         .route("/api/query", post(query_handler))
         .route("/api/chat/stream", post(chat_stream_handler))
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
