@@ -38,3 +38,5 @@ governor = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+teloxide = { workspace = true }
+tempfile = { workspace = true }

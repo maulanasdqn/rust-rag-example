@@ -131,6 +131,31 @@ impl<V: VectorStore, E: EmbeddingProvider, L: LlmProvider> QueryDocuments<V, E, 
         Ok((stream, sources))
     }
 
+    /// Execute a query with conversation history (non-streaming)
+    #[instrument(skip(self, history))]
+    pub async fn execute_with_history(
+        &self,
+        question: &str,
+        history: Vec<ChatMessage>,
+    ) -> Result<QueryResult, AppError> {
+        use futures::StreamExt;
+
+        let (mut stream, sources) = self
+            .execute_stream_with_history(question, history)
+            .await?;
+
+        // Collect all chunks into a single response
+        let mut answer = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => answer.push_str(&chunk),
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(QueryResult { answer, sources })
+    }
+
     #[instrument(skip(self, history))]
     pub async fn execute_stream_with_history(
         &self,

@@ -18,6 +18,35 @@ pub struct Settings {
     pub rag: RagSettings,
     #[serde(default)]
     pub security: SecuritySettings,
+    #[serde(default)]
+    pub telegram: TelegramSettings,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelegramSettings {
+    /// Telegram bot token from @BotFather
+    #[serde(default)]
+    pub bot_token: String,
+    /// Whether the Telegram bot is enabled
+    #[serde(default)]
+    pub enabled: bool,
+    /// Maximum message length (Telegram limit is ~4096)
+    #[serde(default = "default_telegram_max_message_length")]
+    pub max_message_length: usize,
+}
+
+impl Default for TelegramSettings {
+    fn default() -> Self {
+        Self {
+            bot_token: String::new(),
+            enabled: false,
+            max_message_length: default_telegram_max_message_length(),
+        }
+    }
+}
+
+fn default_telegram_max_message_length() -> usize {
+    4000 // Slightly under Telegram's 4096 limit for safety
 }
 
 #[derive(Debug, Clone, Deserialize)]

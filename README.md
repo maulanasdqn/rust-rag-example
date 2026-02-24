@@ -29,6 +29,12 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with Rust, 
 - **Document management** - Upload, list, delete documents
 - **Dark theme** - Modern dark UI with themed scrollbars
 
+### Telegram Bot
+- **RAG queries** - Ask questions via Telegram
+- **Document upload** - Send PDF/text files to index
+- **Conversation memory** - Per-user chat history
+- **Commands** - /start, /help, /new, /docs, /history, /clear
+
 ## Architecture
 
 ```
@@ -115,6 +121,11 @@ SECURITY__EXPENSIVE_RATE_LIMIT_RPM=20
 SECURITY__MAX_QUERY_LENGTH=10000
 SECURITY__MAX_TOKENS=4096
 SECURITY__ALLOWED_ORIGINS=http://localhost:8081
+
+# Telegram Bot
+TELEGRAM__ENABLED=true
+TELEGRAM__BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM__MAX_MESSAGE_LENGTH=4000
 ```
 
 ## API Endpoints
@@ -166,6 +177,37 @@ Automatically enabled. Returns `429 Too Many Requests` when exceeded.
 
 ### Prompt Injection
 Detected patterns are logged but requests are processed (to avoid false positives).
+
+## Telegram Bot Setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram
+2. Copy the bot token
+3. Set environment variables:
+
+```bash
+TELEGRAM__ENABLED=true
+TELEGRAM__BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+```
+
+4. Start the server - the bot will run alongside the HTTP server
+
+### Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and instructions |
+| `/help` | Show available commands |
+| `/new` | Start a fresh conversation |
+| `/docs` | List uploaded documents |
+| `/history` | View recent conversation |
+| `/clear` | Clear conversation history |
+
+### Features
+
+- **Ask questions**: Just send any message to query your documents
+- **Upload documents**: Send PDF or text files to index them
+- **Conversation memory**: Each user has their own conversation history
+- **Source attribution**: Shows relevant source documents with confidence scores
 
 ## License
 

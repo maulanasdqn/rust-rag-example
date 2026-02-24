@@ -1,5 +1,6 @@
 mod router;
 mod security;
+mod telegram;
 mod use_cases;
 
 use rag_config::Settings;
@@ -25,15 +26,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings.security.expensive_rate_limit_rpm
     );
 
+    // Log Telegram configuration
+    if settings.telegram.enabled {
+        info!("Telegram bot: enabled");
+    } else {
+        info!("Telegram bot: disabled");
+    }
+
     let state = use_cases::AppState::new(&settings).await?;
 
-    let app = router::create_router(state, settings.security.clone());
+    let app = router::create_router(state.clone(), settings.security.clone());
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    info!("Server running on {}", addr);
+    info!("HTTP server running on {}", addr);
 
-    axum::serve(listener, app).await?;
+    // Run both HTTP server and Telegram bot concurrently
+    let telegram_settings = settings.telegram.clone();
+    let telegram_state = state.clone();
+
+    tokio::select! {
+        result = axum::serve(listener, app) => {
+            if let Err(e) = result {
+                tracing::error!("HTTP server error: {}", e);
+            }
+        }
+        _ = telegram::run_telegram_bot(telegram_settings, telegram_state) => {
+            info!("Telegram bot stopped");
+        }
+    }
 
     Ok(())
 }

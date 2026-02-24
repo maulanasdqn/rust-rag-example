@@ -46,6 +46,7 @@ async-trait = "0.1"
 config = "0.14"
 futures = "0.3"
 tokio-stream = "0.1"
+teloxide = { version = "0.13", features = ["macros"] }
 
 rag-server = { path = "rag-server" }
 rag-documents = { path = "rag-documents" }
