@@ -557,6 +557,39 @@ pub async fn add_message(conversation_id: Uuid, role: &str, content: &str) -> Re
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateConversationRequest {
+    pub title: String,
+}
+
+pub async fn update_conversation(id: Uuid, title: &str) -> Result<ConversationInfo, String> {
+    let request = UpdateConversationRequest {
+        title: title.to_string(),
+    };
+
+    let response = Request::patch(&format!("{}/conversations/{}", API_BASE, id))
+        .header("Content-Type", "application/json")
+        .json(&request)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if response.ok() {
+        response
+            .json::<ConversationInfo>()
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        let error = response
+            .json::<ApiError>()
+            .await
+            .map(|e| e.error)
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        Err(error)
+    }
+}
+
 pub async fn delete_conversation(id: Uuid) -> Result<DeleteResponse, String> {
     let response = Request::delete(&format!("{}/conversations/{}", API_BASE, id))
         .send()
@@ -651,92 +684,3 @@ pub async fn execute_tool(name: &str, arguments: serde_json::Value) -> Result<To
     }
 }
 
-// ============= Agents API =============
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentInfo {
-    pub name: String,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentListResponse {
-    pub agents: Vec<AgentInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecuteAgentRequest {
-    pub query: String,
-    pub agent_name: Option<String>,
-    pub conversation_id: Option<Uuid>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReasoningStep {
-    pub step_type: String,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentExecutionResponse {
-    pub success: bool,
-    pub answer: String,
-    pub reasoning: Vec<ReasoningStep>,
-    pub sources: Vec<SourceInfo>,
-    pub error: Option<String>,
-}
-
-pub async fn list_agents() -> Result<AgentListResponse, String> {
-    let response = Request::get(&format!("{}/agents", API_BASE))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if response.ok() {
-        response
-            .json::<AgentListResponse>()
-            .await
-            .map_err(|e| e.to_string())
-    } else {
-        let error = response
-            .json::<ApiError>()
-            .await
-            .map(|e| e.error)
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        Err(error)
-    }
-}
-
-pub async fn execute_agent(
-    query: &str,
-    agent_name: Option<String>,
-    conversation_id: Option<Uuid>,
-) -> Result<AgentExecutionResponse, String> {
-    let request = ExecuteAgentRequest {
-        query: query.to_string(),
-        agent_name,
-        conversation_id,
-    };
-
-    let response = Request::post(&format!("{}/agents/execute", API_BASE))
-        .header("Content-Type", "application/json")
-        .json(&request)
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if response.ok() {
-        response
-            .json::<AgentExecutionResponse>()
-            .await
-            .map_err(|e| e.to_string())
-    } else {
-        let error = response
-            .json::<ApiError>()
-            .await
-            .map(|e| e.error)
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        Err(error)
-    }
-}

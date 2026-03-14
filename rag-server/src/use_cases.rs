@@ -1,4 +1,3 @@
-use rag_agents::{AgentCoordinator, ResearcherAgent};
 use rag_config::Settings;
 use rag_database::{create_pool, run_migrations, SurrealVectorStore};
 use rag_documents::{
@@ -27,7 +26,6 @@ pub struct AppState {
     pub query_documents: Arc<QueryDocumentsUseCase>,
     pub conversation_store: Arc<dyn ConversationStore>,
     pub tool_registry: Arc<ToolRegistry>,
-    pub agent_coordinator: Arc<AgentCoordinator>,
     pub security: SecurityState,
 }
 
@@ -95,12 +93,6 @@ impl AppState {
         tool_registry.register(WebSearchTool::new());
         let tool_registry = Arc::new(tool_registry);
 
-        // Initialize agent coordinator with research agent
-        let mut agent_coordinator = AgentCoordinator::new();
-        agent_coordinator.register(ResearcherAgent::new());
-        let _ = agent_coordinator.set_default("researcher");
-        let agent_coordinator = Arc::new(agent_coordinator);
-
         // Initialize security state
         let security = SecurityState::new(settings.security.clone());
 
@@ -111,7 +103,6 @@ impl AppState {
             query_documents,
             conversation_store,
             tool_registry,
-            agent_coordinator,
             security,
         })
     }

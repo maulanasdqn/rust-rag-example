@@ -3,11 +3,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::api::{
     start_chat_stream_with_history, list_conversations, create_conversation, get_messages,
-    add_message, delete_conversation, ChatEvent, SourceInfo, ConversationInfo, MessageInfo,
-    ChatStreamMessage,
+    add_message, update_conversation, delete_conversation, query_documents,
+    ChatEvent, SourceInfo, ConversationInfo, MessageInfo, ChatStreamMessage,
 };
 use crate::components::{Button, Card};
 
@@ -18,6 +19,8 @@ pub struct ChatMessage {
     pub content: String,
     pub sources: Option<Vec<SourceInfo>>,
     pub is_streaming: bool,
+    /// User feedback: Some(1) = thumbs up, Some(-1) = thumbs down, None = none
+    pub feedback: Option<i8>,
 }
 
 impl From<MessageInfo> for ChatMessage {
@@ -28,6 +31,7 @@ impl From<MessageInfo> for ChatMessage {
             content: msg.content,
             sources: None,
             is_streaming: false,
+            feedback: None,
         }
     }
 }
@@ -40,9 +44,15 @@ pub fn ChatPage() -> impl IntoView {
     let (input, set_input) = signal(String::new());
     let (is_loading, set_is_loading) = signal(false);
     let (sidebar_open, set_sidebar_open) = signal(true);
+    let (editing_conv_id, set_editing_conv_id) = signal(Option::<Uuid>::None);
+    let (editing_title, set_editing_title) = signal(String::new());
+    let (search_query, set_search_query) = signal(String::new());
+    let (search_results, set_search_results) = signal(Option::<crate::api::QueryResponse>::None);
+    let (search_loading, set_search_loading) = signal(false);
 
-    // NodeRef for auto-scroll
+    // NodeRef for auto-scroll and chat input (keyboard shortcuts)
     let messages_container: NodeRef<leptos::html::Div> = NodeRef::new();
+    let chat_input_ref: NodeRef<leptos::html::Textarea> = NodeRef::new();
 
     // Auto-scroll to bottom when messages change
     Effect::new(move |_| {
@@ -62,6 +72,41 @@ pub fn ChatPage() -> impl IntoView {
                 closure.forget(); // Prevent closure from being dropped
             }
         }
+    });
+
+    // Keyboard shortcuts: "/" focus chat input, Ctrl+Enter send
+    let input_ref_for_shortcut = chat_input_ref.clone();
+    Effect::new(move |_| {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+        let document = match window.document() {
+            Some(d) => d,
+            None => return,
+        };
+        let closure = Closure::wrap(Box::new(move |ev: web_sys::Event| {
+            let ev = match ev.dyn_into::<web_sys::KeyboardEvent>() {
+                Ok(k) => k,
+                Err(_) => return,
+            };
+            if ev.key() == "/" {
+                if let Some(target) = ev.target() {
+                    if let Ok(elt) = target.dyn_into::<web_sys::Element>() {
+                        let tag = elt.tag_name().to_uppercase();
+                        if tag == "INPUT" || tag == "TEXTAREA" {
+                            return; // Don't steal "/" when typing in another field
+                        }
+                    }
+                }
+                ev.prevent_default();
+                if let Some(ta) = input_ref_for_shortcut.get() {
+                    let _ = ta.focus();
+                }
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        let _ = document.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref());
+        closure.forget();
     });
 
     // Load conversations on mount
@@ -118,6 +163,90 @@ pub fn ChatPage() -> impl IntoView {
             }
         });
     };
+
+    let start_rename = move |conv_id: Uuid| {
+        if let Some(conv) = conversations.get().into_iter().find(|c| c.id == conv_id) {
+            set_editing_conv_id.set(Some(conv_id));
+            set_editing_title.set(conv.title);
+        }
+    };
+
+    let save_rename = move |id: Uuid| {
+        let title = editing_title.get();
+        set_editing_conv_id.set(None);
+        if title.trim().is_empty() {
+            return;
+        }
+        leptos::task::spawn_local(async move {
+            if update_conversation(id, title.trim()).await.is_ok() {
+                set_conversations.update(|convs| {
+                    if let Some(c) = convs.iter_mut().find(|c| c.id == id) {
+                        c.title = title.trim().to_string();
+                    }
+                });
+            }
+        });
+    };
+
+    let cancel_rename = move |_| {
+        set_editing_conv_id.set(None);
+    };
+
+    let run_search = move |_| {
+        let q = search_query.get();
+        if q.trim().is_empty() || search_loading.get() {
+            return;
+        }
+        set_search_loading.set(true);
+        set_search_results.set(None);
+        let query = q.trim().to_string();
+        leptos::task::spawn_local(async move {
+            match query_documents(&query).await {
+                Ok(res) => set_search_results.set(Some(res)),
+                Err(_) => set_search_results.set(None),
+            }
+            set_search_loading.set(false);
+        });
+    };
+
+    let ask_in_chat = move |query: String| {
+        set_search_results.set(None);
+        set_search_query.set(String::new());
+        set_input.set(query);
+    };
+
+    let export_chat = move |_| {
+        let conv_id = current_conversation.get();
+        let convs = conversations.get();
+        let msgs = messages.get();
+        let title = conv_id
+            .and_then(|id| convs.iter().find(|c| c.id == id).map(|c| c.title.clone()))
+            .unwrap_or_else(|| "export".to_string());
+        let mut md = format!("# {}\n\n", title);
+        for m in msgs.iter() {
+            let role = if m.role == "user" { "**You**" } else { "**Assistant**" };
+            md.push_str(&format!("{}\n\n{}\n\n", role, m.content));
+        }
+        let filename = format!("{}.md", title.replace(|c: char| !c.is_alphanumeric(), "_"));
+        download_text(&filename, &md);
+    };
+
+    let on_feedback = Callback::new(move |(id, rating): (Option<Uuid>, i8)| {
+        set_messages.update(|msgs| {
+            if let Some(id) = id {
+                if let Some(m) = msgs.iter_mut().find(|m| m.id == Some(id)) {
+                    m.feedback = Some(rating);
+                }
+            }
+        });
+    });
+
+    let on_suggested_click = Callback::new(move |question: String| {
+        set_input.set(question);
+        if let Some(ta) = chat_input_ref.get() {
+            let _ = ta.focus();
+        }
+    });
 
     let do_send = move || {
         let question = input.get();
@@ -188,26 +317,55 @@ pub fn ChatPage() -> impl IntoView {
                             } else {
                                 convs.into_iter().map(|conv| {
                                     let conv_id = conv.id;
+                                    let conv_title = conv.title.clone();
                                     let is_selected = move || current_conversation.get() == Some(conv_id);
+                                    let is_editing = move || editing_conv_id.get() == Some(conv_id);
                                     view! {
                                         <div class=move || format!(
-                                            "group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors {}",
+                                            "group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors {}",
                                             if is_selected() { "bg-primary/10 text-foreground" } else { "hover:bg-muted text-muted-foreground" }
                                         )>
-                                            <button
-                                                class="flex-1 text-left truncate text-sm"
-                                                on:click=move |_| select_conversation(conv_id)
-                                            >
-                                                {conv.title.clone()}
-                                            </button>
-                                            <button
-                                                class="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
-                                                on:click=move |_| delete_conv(conv_id)
-                                            >
-                                                <svg class="w-3 h-3 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                </svg>
-                                            </button>
+                                            {move || if is_editing() {
+                                                view! {
+                                                    <input
+                                                        type="text"
+                                                        class="flex-1 min-w-0 rounded px-2 py-1 text-sm bg-background border border-input text-foreground"
+                                                        prop:value=editing_title
+                                                        on:input=move |ev| set_editing_title.set(event_target_value(&ev))
+                                                        on:keydown=move |ev| {
+                                                            if ev.key() == "Enter" { save_rename(conv_id); }
+                                                            if ev.key() == "Escape" { cancel_rename(()); }
+                                                        }
+                                                        on:blur=move |_| save_rename(conv_id)
+                                                    />
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <button
+                                                        class="flex-1 text-left truncate text-sm cursor-pointer"
+                                                        on:click=move |_| select_conversation(conv_id)
+                                                    >
+                                                        {conv_title.clone()}
+                                                    </button>
+                                                    <button
+                                                        class="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded transition-all"
+                                                        on:click=move |_| start_rename(conv_id)
+                                                        title="Rename"
+                                                    >
+                                                        <svg class="w-3 h-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        class="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
+                                                        on:click=move |_| delete_conv(conv_id)
+                                                    >
+                                                        <svg class="w-3 h-3 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                        </svg>
+                                                    </button>
+                                                }.into_any()
+                                            }}
                                         </div>
                                     }
                                 }).collect_view().into_any()
@@ -229,7 +387,7 @@ pub fn ChatPage() -> impl IntoView {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                         </svg>
                     </button>
-                    <div>
+                    <div class="flex-1 min-w-0">
                         <h1 class="text-lg font-semibold text-foreground">"Chat"</h1>
                         <p class="text-xs text-muted-foreground">
                             {move || {
@@ -243,6 +401,68 @@ pub fn ChatPage() -> impl IntoView {
                             }}
                         </p>
                     </div>
+                    <button
+                        class="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        title="Export as Markdown"
+                        disabled=move || current_conversation.get().is_none() || messages.get().is_empty()
+                        on:click=export_chat
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                // Search documents (before chat)
+                <div class="px-4 pb-2 border-b border-border">
+                    <div class="flex gap-2">
+                        <input
+                            type="text"
+                            class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            placeholder="Search your documents..."
+                            prop:value=search_query
+                            on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                            on:keydown=move |ev| {
+                                if ev.key() == "Enter" { run_search(()); }
+                            }
+                        />
+                        <Button on_click=move |_| run_search(()) disabled=search_loading>
+                            {move || if search_loading.get() {
+                                view! {
+                                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                }.into_any()
+                            } else {
+                                view! { <span>"Search"</span> }.into_any()
+                            }}
+                        </Button>
+                    </div>
+                    {move || {
+                        if let Some(res) = search_results.get() {
+                            let query_used = search_query.get();
+                            view! {
+                                <div class="mt-2 p-3 rounded-lg border border-border bg-muted/30 space-y-2">
+                                    <p class="text-sm text-foreground line-clamp-2">{res.answer.clone()}</p>
+                                    <p class="text-xs text-muted-foreground">"From " {res.sources.len()} " source(s)"</p>
+                                    <div class="flex gap-2">
+                                        <Button on_click=move |_| ask_in_chat(query_used.clone())>
+                                            "Ask in chat"
+                                        </Button>
+                                        <button
+                                            class="text-xs text-muted-foreground hover:text-foreground"
+                                            on:click=move |_| set_search_results.set(None)
+                                        >
+                                            "Dismiss"
+                                        </button>
+                                    </div>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
+                    }}
                 </div>
 
                 // Messages area
@@ -268,7 +488,13 @@ pub fn ChatPage() -> impl IntoView {
                                 <div class="space-y-4">
                                     {msgs.iter().map(|msg| {
                                         let msg_clone = msg.clone();
-                                        view! { <MessageBubble message=msg_clone /> }
+                                        view! {
+                                            <MessageBubble
+                                                message=msg_clone
+                                                on_feedback=Some(on_feedback)
+                                                on_suggested_click=Some(on_suggested_click)
+                                            />
+                                        }
                                     }).collect::<Vec<_>>()}
                                 </div>
                             }.into_any()
@@ -288,11 +514,15 @@ pub fn ChatPage() -> impl IntoView {
                                             set_input.set(event_target_value(&ev));
                                         }
                                         on:keydown=move |ev| {
-                                            if ev.key() == "Enter" && !ev.shift_key() {
+                                            if ev.key() == "Enter" && ev.ctrl_key() {
+                                                ev.prevent_default();
+                                                do_send();
+                                            } else if ev.key() == "Enter" && !ev.shift_key() {
                                                 ev.prevent_default();
                                                 do_send();
                                             }
                                         }
+                                        node_ref=chat_input_ref
                                         placeholder="Ask a question about your documents..."
                                         rows=2
                                         class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm \
@@ -320,7 +550,7 @@ pub fn ChatPage() -> impl IntoView {
                                     </Button>
                                 </div>
                             </div>
-                            <p class="text-xs text-muted-foreground mt-2">"Press Enter to send, Shift+Enter for new line"</p>
+                            <p class="text-xs text-muted-foreground mt-2">"Press Enter or Ctrl+Enter to send, Shift+Enter for new line. Press / to focus chat."</p>
                         </div>
                     </Card>
                 </div>
@@ -347,6 +577,7 @@ async fn send_message(
             content: question.clone(),
             sources: None,
             is_streaming: false,
+            feedback: None,
         });
     });
 
@@ -381,6 +612,7 @@ async fn send_message(
             content: String::new(),
             sources: None,
             is_streaming: true,
+            feedback: None,
         });
     });
 
@@ -458,8 +690,64 @@ async fn send_message(
 }
 
 #[component]
-fn MessageBubble(message: ChatMessage) -> impl IntoView {
+fn SourceCitations(sources: Vec<SourceInfo>) -> impl IntoView {
+    let (expanded, set_expanded) = signal(false);
+    view! {
+        <div class="pl-11 mt-2">
+            <button
+                type="button"
+                class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors"
+                on:click=move |_| set_expanded.update(|v| *v = !*v)
+            >
+                <svg class=move || format!("w-3.5 h-3.5 transition-transform {}", if expanded.get() { "rotate-90" } else { "" }) fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+                <span>"Cited sources (" {sources.len()} ")"</span>
+            </button>
+            {move || if expanded.get() {
+                view! {
+                    <div class="mt-2 space-y-2">
+                        {sources.iter().map(|source| {
+                            let relevance = (source.relevance_score * 100.0) as i32;
+                            view! {
+                                <div class="rounded-lg border border-border bg-muted/50 p-3 text-xs">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <svg class="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        <span class="font-medium text-foreground truncate">{source.source_file.clone()}</span>
+                                        <span class="text-muted-foreground flex-shrink-0">{format!("{}% match", relevance)}</span>
+                                    </div>
+                                    <p class="text-muted-foreground line-clamp-3 pl-5">{source.excerpt.clone()}</p>
+                                </div>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </div>
+                }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            }}
+        </div>
+    }
+}
+
+const SUGGESTED_QUESTIONS: &[&str] = &[
+    "Tell me more about this",
+    "Summarize briefly",
+    "What are the key points?",
+];
+
+#[component]
+fn MessageBubble(
+    message: ChatMessage,
+    on_feedback: Option<Callback<(Option<Uuid>, i8)>>,
+    on_suggested_click: Option<Callback<String>>,
+) -> impl IntoView {
     let is_user = message.role == "user";
+    let show_feedback = !is_user && !message.is_streaming && on_feedback.is_some();
+    let show_suggestions = !is_user && !message.is_streaming && on_suggested_click.is_some();
+    let msg_id = message.id;
+    let feedback = message.feedback;
 
     view! {
         <div class=move || format!(
@@ -498,35 +786,141 @@ fn MessageBubble(message: ChatMessage) -> impl IntoView {
                             </div>
                         </div>
 
-                        // Sources
+                        // Cited sources (expandable with excerpts)
                         {message.sources.clone().map(|sources| {
                             if sources.is_empty() {
                                 None
                             } else {
                                 Some(view! {
-                                    <div class="pl-11">
-                                        <p class="text-xs text-muted-foreground mb-2">"Sources:"</p>
-                                        <div class="flex flex-wrap gap-2">
-                                            {sources.iter().map(|source| {
-                                                let relevance = (source.relevance_score * 100.0) as i32;
-                                                view! {
-                                                    <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-muted rounded-lg text-xs">
-                                                        <svg class="w-3 h-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                                        </svg>
-                                                        <span class="text-foreground truncate max-w-[150px]">{source.source_file.clone()}</span>
-                                                        <span class="text-muted-foreground">{format!("{}%", relevance)}</span>
-                                                    </div>
-                                                }
-                                            }).collect::<Vec<_>>()}
-                                        </div>
-                                    </div>
+                                    <SourceCitations sources=sources />
                                 })
                             }
                         })}
+
+                        // Feedback (thumbs up/down) for assistant messages
+                        {move || if show_feedback {
+                            let up = move |_| {
+                                if let Some(cb) = on_feedback.clone() {
+                                    cb.run((msg_id, 1));
+                                }
+                            };
+                            let down = move |_| {
+                                if let Some(cb) = on_feedback.clone() {
+                                    cb.run((msg_id, -1));
+                                }
+                            };
+                            view! {
+                                <div class="flex items-center gap-1 mt-2 pt-2 border-t border-border/50">
+                                    <button
+                                        type="button"
+                                        class=move || format!(
+                                            "p-1.5 rounded transition-colors {}",
+                                            if feedback == Some(1) { "text-primary bg-primary/10" } else { "text-muted-foreground hover:text-foreground hover:bg-muted" }
+                                        )
+                                        title="Helpful"
+                                        on:click=up
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z"></path>
+                                        </svg>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class=move || format!(
+                                            "p-1.5 rounded transition-colors {}",
+                                            if feedback == Some(-1) { "text-destructive bg-destructive/10" } else { "text-muted-foreground hover:text-foreground hover:bg-muted" }
+                                        )
+                                        title="Not helpful"
+                                        on:click=down
+                                    >
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M18 9.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM12.5 2c-.828 0-1.5.672-1.5 1.5v7.5c0 .828.672 1.5 1.5 1.5H17c.828 0 1.5-.672 1.5-1.5v-7.5c0-.828-.672-1.5-1.5-1.5h-4.5zM3 13.5A1.5 1.5 0 014.5 12H9v6H4.5A1.5 1.5 0 013 16.5v-3z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
+
+                        // Suggested follow-up questions
+                        {move || if show_suggestions {
+                            let cb = on_suggested_click.clone();
+                            view! {
+                                <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/50">
+                                    {SUGGESTED_QUESTIONS.iter().map(|q| {
+                                        let question = (*q).to_string();
+                                        let question_for_click = question.clone();
+                                        let click = move |_| {
+                                            if let Some(ref c) = cb {
+                                                c.run(question_for_click.clone());
+                                            }
+                                        };
+                                        view! {
+                                            <button
+                                                type="button"
+                                                class="text-xs px-2.5 py-1 rounded-md border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                on:click=click
+                                            >
+                                                {question}
+                                            </button>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
                     }.into_any()
                 }}
             </div>
         </div>
     }
+}
+
+/// Trigger browser download of text content as a file.
+fn download_text(filename: &str, content: &str) {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return,
+    };
+    let document = match window.document() {
+        Some(d) => d,
+        None => return,
+    };
+    let arr = js_sys::Array::new();
+    arr.push(&JsValue::from_str(content));
+    let opts = {
+        let o = web_sys::BlobPropertyBag::new();
+        o.set_type("text/markdown");
+        o
+    };
+    let blob = match web_sys::Blob::new_with_str_sequence_and_options(&arr, &opts) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+    let url = match web_sys::Url::create_object_url_with_blob(&blob) {
+        Ok(u) => u,
+        Err(_) => return,
+    };
+    let a: web_sys::HtmlAnchorElement = match document
+        .create_element("a")
+        .ok()
+        .and_then(|e| e.dyn_into().ok())
+    {
+        Some(anchor) => anchor,
+        None => {
+            let _ = web_sys::Url::revoke_object_url(&url);
+            return;
+        }
+    };
+    let _ = a.set_attribute("href", &url);
+    let _ = a.set_attribute("download", filename);
+    let _ = a.set_attribute("style", "display: none");
+    if let Some(body) = document.body() {
+        let _ = body.append_child(&a);
+    }
+    let _ = a.click();
+    let _ = a.remove();
+    let _ = web_sys::Url::revoke_object_url(&url);
 }

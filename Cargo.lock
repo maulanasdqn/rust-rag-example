@@ -4294,24 +4294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rag-agents"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "futures",
- "rag-errors",
- "rag-inference",
- "rag-memory",
- "rag-tools",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "rag-config"
 version = "0.1.0"
 dependencies = [
@@ -4420,7 +4402,6 @@ dependencies = [
  "futures",
  "governor",
  "hex",
- "rag-agents",
  "rag-config",
  "rag-database",
  "rag-documents",

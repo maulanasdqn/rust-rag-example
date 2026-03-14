@@ -3,13 +3,14 @@ target = "index.html"
 dist = "dist"
 
 [watch]
-watch = ["src", "index.html", "input.css"]
+watch = ["src", "index.html", "input.css", ".tailwind"]
 
 [serve]
 address = "127.0.0.1"
 port = 8081
 
+# Tailwind: config is in .tailwind/ so Trunk does not auto-detect and run its built-in (sh-based) pipeline. We run via cmd on Windows.
 [[hooks]]
 stage = "pre_build"
-command = "sh"
-command_arguments = ["-c", "npx tailwindcss -i input.css -o output.css"]
+command = "cmd"
+command_arguments = ["/c", "npx tailwindcss -i input.css -o styles.css -c .tailwind/tailwind.config.js"]

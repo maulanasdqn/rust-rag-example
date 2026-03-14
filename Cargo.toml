@@ -12,7 +12,6 @@ members = [
     "rag-ui",
     "rag-memory",
     "rag-tools",
-    "rag-agents",
 ]
 
 [workspace.package]
@@ -58,4 +57,3 @@ rag-errors = { path = "rag-errors" }
 rag-config = { path = "rag-config" }
 rag-memory = { path = "rag-memory" }
 rag-tools = { path = "rag-tools" }
-rag-agents = { path = "rag-agents" }

@@ -45,14 +45,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let telegram_settings = settings.telegram.clone();
     let telegram_state = state.clone();
 
-    tokio::select! {
-        result = axum::serve(listener, app) => {
-            if let Err(e) = result {
-                tracing::error!("HTTP server error: {}", e);
+    if telegram_settings.enabled {
+        tokio::select! {
+            result = axum::serve(listener, app) => {
+                if let Err(e) = result {
+                    tracing::error!("HTTP server error: {}", e);
+                }
+            }
+            _ = telegram::run_telegram_bot(telegram_settings, telegram_state) => {
+                info!("Telegram bot stopped");
             }
         }
-        _ = telegram::run_telegram_bot(telegram_settings, telegram_state) => {
-            info!("Telegram bot stopped");
+    } else {
+        telegram::run_telegram_bot(telegram_settings, telegram_state).await;
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!("HTTP server error: {}", e);
         }
     }
 

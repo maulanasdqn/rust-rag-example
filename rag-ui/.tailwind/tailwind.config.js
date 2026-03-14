@@ -1,8 +1,10 @@
 /** @type {import('tailwindcss').Config} */
+const path = require("path");
 module.exports = {
+  // Paths relative to rag-ui (CWD when tailwind runs). path.resolve from config dir.
   content: [
-    "./src/**/*.rs",
-    "./index.html",
+    path.resolve(__dirname, "../src/**/*.rs"),
+    path.resolve(__dirname, "../index.html"),
   ],
   darkMode: "class",
   theme: {

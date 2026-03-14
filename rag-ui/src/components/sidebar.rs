@@ -22,7 +22,6 @@ pub fn Sidebar() -> impl IntoView {
                 <nav class="flex-1 px-4 py-6 space-y-2">
                     <SidebarLink href="/" icon="dashboard" label="Dashboard" />
                     <SidebarLink href="/chat" icon="chat" label="Chat" />
-                    <SidebarLink href="/agents" icon="agents" label="Agents" />
                     <SidebarLink href="/documents" icon="documents" label="Documents" />
                 </nav>
 
@@ -71,11 +70,6 @@ fn SidebarLink(href: &'static str, icon: &'static str, label: &'static str) -> i
         "documents" => view! {
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-        }.into_any(),
-        "agents" => view! {
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
             </svg>
         }.into_any(),
         _ => view! { <span></span> }.into_any(),
@@ -147,22 +141,6 @@ pub fn MobileNav() -> impl IntoView {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                     </svg>
                     <span class="text-xs font-medium">"Chat"</span>
-                </a>
-                <a
-                    href="/agents"
-                    class=move || format!(
-                        "flex flex-col items-center justify-center gap-1 w-16 py-2 transition-colors {}",
-                        if is_active("/agents") {
-                            "text-primary"
-                        } else {
-                            "text-muted-foreground hover:text-foreground"
-                        }
-                    )
-                >
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                    </svg>
-                    <span class="text-xs font-medium">"Agents"</span>
                 </a>
                 <a
                     href="/documents"

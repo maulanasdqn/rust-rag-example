@@ -3,7 +3,7 @@ use axum::{
     http::{header, HeaderName, HeaderValue, Method},
     middleware,
     response::sse::{Event, KeepAlive, Sse},
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use futures::stream::StreamExt;
@@ -94,15 +94,13 @@ pub fn create_router(state: AppState, security_settings: SecuritySettings) -> Ro
         .route("/api/conversations", post(create_conversation_handler))
         .route("/api/conversations", get(list_conversations_handler))
         .route("/api/conversations/:id", get(get_conversation_handler))
+        .route("/api/conversations/:id", patch(update_conversation_handler))
         .route("/api/conversations/:id", delete(delete_conversation_handler))
         .route("/api/conversations/:id/messages", get(get_messages_handler))
         .route("/api/conversations/:id/messages", post(add_message_handler))
         // Tool endpoints
         .route("/api/tools", get(list_tools_handler))
         .route("/api/tools/:name/execute", post(execute_tool_handler))
-        // Agent endpoints
-        .route("/api/agents", get(list_agents_handler))
-        .route("/api/agents/execute", post(execute_agent_handler))
         // Security middleware (applied in reverse order)
         .layer(middleware::from_fn_with_state(security_for_auth, auth_middleware))
         .layer(middleware::from_fn_with_state(security_for_rate_limit, rate_limit_middleware))
@@ -463,6 +461,32 @@ async fn get_conversation_handler(
     Ok(Json(conversation.into()))
 }
 
+#[derive(Deserialize)]
+pub struct UpdateConversationRequest {
+    pub title: String,
+}
+
+async fn update_conversation_handler(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(request): Json<UpdateConversationRequest>,
+) -> Result<Json<ConversationResponse>, AppError> {
+    let title = request.title.trim();
+    if title.is_empty() {
+        return Err(AppError::InvalidDocumentFormat("Title cannot be empty".to_string()));
+    }
+    state
+        .conversation_store
+        .update_conversation_title(id, title)
+        .await?;
+    let conversation = state
+        .conversation_store
+        .get_conversation(id)
+        .await?
+        .ok_or_else(|| AppError::DocumentNotFound(format!("Conversation {} not found", id)))?;
+    Ok(Json(conversation.into()))
+}
+
 async fn delete_conversation_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -612,117 +636,3 @@ async fn execute_tool_handler(
     }))
 }
 
-// ============= Agent Endpoints =============
-
-#[derive(Serialize)]
-pub struct AgentInfo {
-    pub name: String,
-    pub description: String,
-}
-
-#[derive(Serialize)]
-pub struct AgentListResponse {
-    pub agents: Vec<AgentInfo>,
-}
-
-async fn list_agents_handler(
-    State(state): State<AppState>,
-) -> Result<Json<AgentListResponse>, AppError> {
-    let agents: Vec<AgentInfo> = state
-        .agent_coordinator
-        .get_agent_info()
-        .into_iter()
-        .map(|info| AgentInfo {
-            name: info.name,
-            description: info.description,
-        })
-        .collect();
-
-    Ok(Json(AgentListResponse { agents }))
-}
-
-#[derive(Deserialize)]
-pub struct ExecuteAgentRequest {
-    pub query: String,
-    pub agent_name: Option<String>,
-    pub conversation_id: Option<Uuid>,
-}
-
-#[derive(Serialize)]
-pub struct AgentExecutionResponse {
-    pub success: bool,
-    pub answer: String,
-    pub reasoning: Vec<ReasoningStepResponse>,
-    pub sources: Vec<SourceInfo>,
-    pub error: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct ReasoningStepResponse {
-    pub step_type: String,
-    pub content: String,
-}
-
-async fn execute_agent_handler(
-    State(state): State<AppState>,
-    Json(request): Json<ExecuteAgentRequest>,
-) -> Result<Json<AgentExecutionResponse>, AppError> {
-    use rag_agents::AgentContext;
-
-    // Validate query
-    let validated = state.security.validate_query(&request.query)
-        .map_err(|e| AppError::InvalidDocumentFormat(e.error))?;
-
-    if let Some(warning) = &validated.injection_warning {
-        tracing::warn!(warning = %warning, "Processing agent request despite injection warning");
-    }
-
-    // Build context
-    let mut context = if let Some(conv_id) = request.conversation_id {
-        AgentContext::with_conversation(conv_id)
-    } else {
-        AgentContext::new()
-    };
-
-    // Load recent messages if we have a conversation
-    if let Some(conv_id) = request.conversation_id {
-        let messages = state
-            .conversation_store
-            .get_recent_messages(conv_id, 10)
-            .await?;
-        context = context.with_messages(messages);
-    }
-
-    // Execute the agent with validated query
-    let result = if let Some(agent_name) = request.agent_name {
-        state
-            .agent_coordinator
-            .execute_with_agent(&agent_name, &context, &validated.content)
-            .await?
-    } else {
-        state
-            .agent_coordinator
-            .execute(&context, &validated.content)
-            .await?
-    };
-
-    Ok(Json(AgentExecutionResponse {
-        success: result.success,
-        answer: result.answer,
-        reasoning: result
-            .reasoning
-            .into_iter()
-            .map(|step| ReasoningStepResponse {
-                step_type: format!("{:?}", step.step_type).to_lowercase(),
-                content: step.content,
-            })
-            .collect(),
-        sources: result.sources.into_iter().map(|s| SourceInfo {
-            document_id: s.document_id,
-            source_file: s.source_file,
-            excerpt: s.excerpt,
-            relevance_score: s.relevance_score,
-        }).collect(),
-        error: result.error,
-    }))
-}

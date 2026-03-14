@@ -194,9 +194,7 @@ pub async fn rate_limit_middleware(
     let path = request.uri().path().to_string();
 
     // Determine if this is an expensive operation
-    let is_expensive = path.contains("/chat/")
-        || path.contains("/agents/")
-        || path.contains("/query");
+    let is_expensive = path.contains("/chat/") || path.contains("/query");
 
     let limiter = if is_expensive {
         security.get_expensive_rate_limiter(&ip).await

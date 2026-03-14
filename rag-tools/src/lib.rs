@@ -1,4 +1,4 @@
-//! rag-tools - Tool definitions and execution for agentic RAG
+//! rag-tools - Tool definitions and execution for RAG
 //!
 //! This crate provides:
 //! - Tool trait for defining callable tools

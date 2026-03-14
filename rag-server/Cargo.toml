@@ -17,7 +17,6 @@ rag-query = { path = "../rag-query" }
 rag-types = { path = "../rag-types" }
 rag-memory = { path = "../rag-memory" }
 rag-tools = { path = "../rag-tools" }
-rag-agents = { path = "../rag-agents" }
 
 axum = { workspace = true }
 axum-extra = { workspace = true }

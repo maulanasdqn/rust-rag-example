@@ -1,6 +1,6 @@
 # Rust RAG Application
 
-A production-ready Retrieval-Augmented Generation (RAG) system built with Rust, featuring an agentic architecture, security controls, and a modern web UI.
+A production-ready Retrieval-Augmented Generation (RAG) system built with Rust, featuring security controls and a modern web UI.
 
 ## Features
 
@@ -18,10 +18,8 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with Rust, 
 - **Cost controls** - Configurable max_tokens limit
 - **CORS** - Configurable allowed origins
 
-### Agentic System
-- **Tool system** - Calculator, DateTime, Web Search tools
-- **Multi-agent architecture** - Researcher agent with tool execution
-- **Execution loop** - Think → Act → Observe cycle
+### Tools
+- **Tool system** - Calculator, DateTime, Web Search tools (API only)
 
 ### UI
 - **Leptos frontend** - Rust/WASM single-page application
@@ -46,7 +44,6 @@ rag-inference/   # OpenAI LLM provider
 rag-query/       # RAG query execution
 rag-memory/      # Conversation storage
 rag-tools/       # Tool definitions
-rag-agents/      # Agent system
 rag-types/       # Shared types
 rag-errors/      # Error handling
 rag-ui/          # Leptos frontend
@@ -76,6 +73,9 @@ dev  # starts backend + frontend with hot reload
 # Or manually
 cargo run -p rag-server &
 cd rag-ui && trunk serve --port 8081
+
+# Windows: Trunk's built-in pipeline calls "sh", which doesn't exist. Always run the UI via npm so the sh wrapper is on PATH:
+cd rag-ui && npm run serve
 ```
 
 ### Production
@@ -147,11 +147,9 @@ TELEGRAM__MAX_MESSAGE_LENGTH=4000
 - `GET /api/conversations/:id/messages` - Get messages
 - `POST /api/conversations/:id/messages` - Add message
 
-### Tools & Agents
+### Tools
 - `GET /api/tools` - List available tools
 - `POST /api/tools/:name/execute` - Execute tool
-- `GET /api/agents` - List agents
-- `POST /api/agents/execute` - Execute agent query
 
 ### Health
 - `GET /api/health` - Health check

@@ -23,6 +23,11 @@ web-sys = { version = "0.3", features = [
     "HtmlInputElement",
     "Element",
     "Window",
+    "Document",
+    "HtmlAnchorElement",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
     "console",
     "Headers",
     "Request",
@@ -31,6 +36,10 @@ web-sys = { version = "0.3", features = [
     "Response",
     "ReadableStream",
     "ReadableStreamDefaultReader",
+    "Storage",
+    "Event",
+    "KeyboardEvent",
+    "EventTarget",
 ] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -45,6 +54,4 @@ rag-types = { workspace = true }
 # UUID for document IDs (needs js feature for WASM)
 uuid = { version = "1.0", features = ["v4", "serde", "js"] }
 
-[package.metadata.leptos]
-tailwind-input-file = "input.css"
-tailwind-output-file = "output.css"
+# Tailwind is run via Trunk.toml pre_build hook (no Leptos metadata = no default sh hook on Windows)
